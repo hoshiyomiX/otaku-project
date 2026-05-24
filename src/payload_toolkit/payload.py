@@ -22,6 +22,7 @@ This module provides:
 """
 
 import hashlib
+import io
 import os
 import struct
 import sys
@@ -32,6 +33,7 @@ from .compression import (
     compress,
     decompress,
     detect_compression,
+    hash_and_compress_file,
     operation_type_for_algorithm,
     ALG_NONE,
 )
@@ -363,27 +365,30 @@ def write_payload(output_path, partitions_data, block_size=DEFAULT_BLOCK_SIZE,
             _report_progress(idx + 1, total_images,
                             f"Processing {name}")
 
-            # Read image in chunks to handle large files
-            sha = hashlib.sha256()
-            img_data = bytearray()
-
-            with open(image_path, "rb") as f:
-                while True:
-                    chunk = f.read(4 * 1024 * 1024)  # 4 MB chunks
-                    if not chunk:
-                        break
-                    sha.update(chunk)
-                    img_data.extend(chunk)
-
-            hash_bytes = sha.digest()
-
-            # Compress
+            # Stream-read image: hash + compress in a single pass.
+            # Uses hash_and_compress_file() to avoid loading the full
+            # partition into memory — critical for 2GB+ images on Android.
             if alg and alg.lower() != "none":
-                compressed = compress(bytes(img_data), algorithm=alg)
+                compressed, hash_hex = hash_and_compress_file(
+                    image_path, algorithm=alg,
+                    on_progress=lambda done, tot, _n=name, _i=idx, _t=total_images:
+                        _report_progress(_i + 1 + done / max(tot, 1), _t,
+                                        f"Compressing {_n}")
+                )
+                hash_bytes = bytes.fromhex(hash_hex)
             else:
-                compressed = bytes(img_data)
-
-            del img_data  # free memory
+                # No compression: hash only, stream raw bytes
+                sha = hashlib.sha256()
+                raw_buf = io.BytesIO()
+                with open(image_path, "rb") as f:
+                    while True:
+                        chunk = f.read(4 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        sha.update(chunk)
+                        raw_buf.write(chunk)
+                hash_bytes = sha.digest()
+                compressed = raw_buf.getvalue()
 
             # Build InstallOperation
             op_type = operation_type_for_algorithm(alg)

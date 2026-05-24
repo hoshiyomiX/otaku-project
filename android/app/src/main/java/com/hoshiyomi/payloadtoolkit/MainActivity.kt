@@ -1,8 +1,6 @@
 package com.hoshiyomi.payloadtoolkit
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,7 +13,6 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.View
 import android.widget.ArrayAdapter
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -31,11 +28,6 @@ import java.lang.ref.WeakReference
 import java.io.File
 import java.io.FileOutputStream
 import androidx.core.content.edit
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
-import android.app.NotificationManager
-import android.app.PendingIntent
-import androidx.core.app.NotificationCompat
 
 /**
  * MainActivity — Payload Toolkit Android.
@@ -58,7 +50,7 @@ class MainActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════════
 
     private var selectedCompression: String = "gzip"
-    private var selectedCompressionLevel: Int = 0  // 0 = default (best)
+    private var selectedCompressionLevel: Int = -1  // -1 = default (use algorithm's balanced default)
     private var imageFiles: MutableList<Pair<String, String>> = mutableListOf() // (name, path)
     private var isExecuting = false
     companion object {
@@ -99,75 +91,13 @@ class MainActivity : AppCompatActivity() {
         @Volatile private var currentPartitionIndex: Int = -1
         @Volatile private var partitionNames: List<String> = emptyList()
 
-        // Notification management (survives Activity recreation)
-        private const val NOTIFICATION_ID = 1001
-        @Volatile private var appContext: Context? = null
+        // Notification management delegated to RepackNotificationHelper
 
         // Cached dependency check result (updated at init, used for pre-repack validation)
         @Volatile var cachedDepCheck: PythonBridge.DepCheckResult? = null
             private set
 
-        /** Show ongoing progress notification with determinate progress bar. */
-        fun showProgressNotification(message: String, percent: Int) {
-            val ctx = appContext ?: return
-            try {
-                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } ?: return
-                val pi = PendingIntent.getActivity(
-                    ctx, 0, intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                val notification = NotificationCompat.Builder(ctx, PayloadToolkitApp.CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentTitle("Payload Toolkit")
-                    .setContentText(message)
-                    .setProgress(100, percent.coerceIn(0, 100), percent == 0)
-                    .setOngoing(true)
-                    .setSilent(true)
-                    .setContentIntent(pi)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .build()
-                nm.notify(NOTIFICATION_ID, notification)
-            } catch (_: Exception) { /* notification is non-critical */ }
-        }
 
-        /** Show completion/failure notification (auto-dismissable). */
-        fun showCompletionNotification(success: Boolean, message: String) {
-            val ctx = appContext ?: return
-            try {
-                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } ?: return
-                val pi = PendingIntent.getActivity(
-                    ctx, 0, intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                val notification = NotificationCompat.Builder(ctx, PayloadToolkitApp.CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentTitle(if (success) "Repack Completed" else "Repack Failed")
-                    .setContentText(message)
-                    .setOngoing(false)
-                    .setAutoCancel(true)
-                    .setContentIntent(pi)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .build()
-                nm.notify(NOTIFICATION_ID, notification)
-            } catch (_: Exception) { /* notification is non-critical */ }
-        }
-
-        /** Cancel the repack notification. */
-        fun cancelRepackNotification() {
-            try {
-                appContext?.let {
-                    (it.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                        .cancel(NOTIFICATION_ID)
-                }
-            } catch (_: Exception) { /* notification is non-critical */ }
-            appContext = null
-        }
     }
 
     // App-internal directories
@@ -192,10 +122,6 @@ class MainActivity : AppCompatActivity() {
     ) { uris: List<Uri>? ->
         uris?.let { handleImageFilesSelected(it) }
     }
-
-    private val removeImageConfirm = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { /* Not used — placeholder for future file save */ }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -231,7 +157,6 @@ class MainActivity : AppCompatActivity() {
         setupDeviceMetaFields()
         setupOutputField()
         setupCustomFilenameField()
-        setupThemeToggle()
         updateOutputPreview()  // Show default filename preview immediately
 
         requestStoragePermissions()
@@ -364,11 +289,6 @@ class MainActivity : AppCompatActivity() {
         item.setIcon(if (mode == "dark") R.drawable.ic_theme_dark else R.drawable.ic_theme_light)
     }
 
-    private fun setupThemeToggle() {
-        // Theme toggle is handled via toolbar menu item (R.id.action_toggle_theme).
-        // No extra setup needed here — onCreateOptionsMenu + onOptionsItemSelected handle it.
-    }
-
     private fun setupCustomFilenameField() {
         val editFilename = findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.editTextCustomFilename)
         // Restore persisted custom filename (or keep empty for auto)
@@ -451,63 +371,21 @@ class MainActivity : AppCompatActivity() {
         setupCompressionLevelSpinner()
     }
 
-    // Compression level ranges per algorithm (matches Python LEVEL_RANGES)
-    // Default level per algorithm (matches Python DEFAULT_LEVELS):
-    //   gzip=6, bzip2=9, xz=6, brotli=6
-    private val COMPRESSION_LEVELS: Map<String, Pair<Int, Int>> = mapOf(
-        "none" to Pair(0, 0),     // no compression
-        "gzip" to Pair(1, 9),     // stdlib gzip: levels 1-9, default 6
-        "bzip2" to Pair(1, 9),    // stdlib bzip2: levels 1-9, default 9
-        "xz" to Pair(0, 9),       // stdlib lzma: levels 0-9, default 6
-        "brotli" to Pair(0, 11)   // brotli: quality 0-11, default 6
-    )
-
-    // Default compression level per algorithm (single source of truth for UI labels)
-    private val DEFAULT_COMPRESSION_LEVELS: Map<String, Int> = mapOf(
-        "none" to 0,
-        "gzip" to 6,
-        "bzip2" to 9,
-        "xz" to 6,
-        "brotli" to 6
-    )
-
-    private fun setupCompressionLevelSpinner() {
-        val spinner = findViewById<android.widget.Spinner>(R.id.spinnerCompressionLevel)
-        updateCompressionLevelSpinner()
-
-        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val items = getCurrentLevelItems()
-                selectedCompressionLevel = if (position < items.size) items[position] else 0
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
-    }
-
-    private fun getCurrentLevelItems(): List<Int> {
-        val range = COMPRESSION_LEVELS[selectedCompression] ?: (0 to 0)
-        val (min, max) = range
-        return if (min == 0 && max == 0) {
-            listOf(0)  // "none" → just show "Default"
-        } else {
-            listOf(0) + (min..max).toList()  // 0 (default) + 1..9
-        }
-    }
+    private fun getCurrentLevelItems(): List<Int> = CompressionConfig.getLevelItems(selectedCompression)
 
     private fun updateCompressionLevelSpinner() {
         val spinner = findViewById<android.widget.Spinner>(R.id.spinnerCompressionLevel) ?: return
         val items = getCurrentLevelItems()
-        val defaultLevel = DEFAULT_COMPRESSION_LEVELS[selectedCompression] ?: 0
-        val labels = items.map { if (it == 0) "Default ($defaultLevel)" else "$it" }
+        val labels = items.map { CompressionConfig.formatLevelLabel(it) }
         val adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
             labels
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         spinner.adapter = adapter
-        // Reset selection to "Default"
+        // Reset selection to "Default" (-1)
         spinner.setSelection(0)
-        selectedCompressionLevel = 0
+        selectedCompressionLevel = -1
     }
 
     private fun setupButtons() {
@@ -521,7 +399,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.buttonRemoveAll)?.setOnClickListener {
             imageFiles.clear()
-            copyPendingRemovals()
+            FileHelper.cleanupOrphanedImages(inputDir, emptyList())
             updateImageListUI()
             updateOutputPreview()
             showLog("All images removed.\n", LogLevel.INFO)
@@ -532,7 +410,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.buttonCopyLog).setOnClickListener {
-            copyLogToClipboard()
+            val logText = findViewById<android.widget.TextView>(R.id.textViewLog)?.text?.toString()
+            LogHelper.copyLogToClipboard(this, logText)
         }
 
         findViewById<View>(R.id.buttonClearLog).setOnClickListener {
@@ -783,9 +662,9 @@ class MainActivity : AppCompatActivity() {
         showLog("Partitions (${images.size}):\n", LogLevel.INFO)
         images.entries.sortedBy { it.key }.forEach { (name, path) ->
             val file = File(path)
-            showLog("  $name (${formatFileSize(file.length())})\n")
+            showLog("  $name (${FileHelper.formatFileSize(file.length())})\n")
         }
-        showLog("Compression: $selectedCompression (level $selectedCompressionLevel)\n", LogLevel.INFO)
+        showLog("Compression: $selectedCompression${CompressionConfig.formatLevelForLog(selectedCompressionLevel)}\n", LogLevel.INFO)
         showLog("Device: $deviceValue\n", LogLevel.INFO)
         showLog("Output file: $outputFileName\n", LogLevel.INFO)
         showLog("Output path: $outPath\n\n", LogLevel.INFO)
@@ -797,13 +676,13 @@ class MainActivity : AppCompatActivity() {
         lastProgressTime = System.currentTimeMillis()  // Start heartbeat
         isRepacking = true
         isExecuting = true
-        appContext = applicationContext
+        RepackNotificationHelper.appContext = applicationContext
         setUIExecuting(true)
         val sortedNames = images.keys.sorted()
         partitionNames = sortedNames
         setupSplitProgressBar(sortedNames)
         showLog("[INFO] Starting repack operation...\n", LogLevel.INFO)
-        showProgressNotification("Preparing repack...", 0)
+        RepackNotificationHelper.showProgress("Preparing repack...", 0)
 
         // Execute in application-scoped scope (survives Activity destruction)
         repackScope.launch {
@@ -835,7 +714,7 @@ class MainActivity : AppCompatActivity() {
                         val msg = "${progress.message} — ${progress.percent}%"
                         if (msg != lastProgressMessage) {
                             lastProgressMessage = msg
-                            showProgressNotification(msg, progress.percent)
+                            RepackNotificationHelper.showProgress(msg, progress.percent)
                         }
 
                         // Update split progress bars (per-partition) using message-based mapping.
@@ -926,7 +805,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                showCompletionNotification(false, "Repack cancelled")
+                RepackNotificationHelper.showCompletion(false, "Repack cancelled")
                 throw e  // Don't swallow coroutine cancellation
             } catch (e: Exception) {
                 val current = activityRef?.get()
@@ -934,7 +813,7 @@ class MainActivity : AppCompatActivity() {
                     current.showLog("[ERROR] Repack failed: ${e.message}\n", LogLevel.ERROR)
                     current.showLog("[INFO] Check logcat for details.\n", LogLevel.WARN)
                 }
-                showCompletionNotification(false, "${e.message}")
+                RepackNotificationHelper.showCompletion(false, "${e.message}")
             } finally {
                 // Release WakeLock
                 try { wakeLock?.release() } catch (_: Exception) {}
@@ -963,11 +842,11 @@ class MainActivity : AppCompatActivity() {
                 else "${durationMs / 60000}m ${durationMs % 60000}"
             showLog("Completed in ${durationMs}ms\n", LogLevel.SUCCESS)
             showLog("Output: $lastOutputPath\n", LogLevel.INFO)
-            showCompletionNotification(true, "Completed in $duration")
+            RepackNotificationHelper.showCompletion(true, "Completed in $duration")
         } else {
             showLog("Failed in ${durationMs}ms\n", LogLevel.ERROR)
             showLog("Error: $error\n", LogLevel.ERROR)
-            showCompletionNotification(false, error ?: "Unknown error")
+            RepackNotificationHelper.showCompletion(false, error ?: "Unknown error")
         }
         showLog("\u2550".repeat(50) + "\n\n")
         showLog("[INFO] Repack finished\n", LogLevel.INFO)
@@ -987,7 +866,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val lines = imageFiles.sortedBy { it.first }.mapIndexed { idx, (name, path) ->
                 val file = File(path)
-                "  ${idx + 1}. $name  (${formatFileSize(file.length())})"
+                "  ${idx + 1}. $name  (${FileHelper.formatFileSize(file.length())})"
             }
             textView?.text = lines.joinToString("\n")
             removeButton?.visibility = View.VISIBLE
@@ -1019,12 +898,6 @@ class MainActivity : AppCompatActivity() {
         layout?.helperText = fileName
     }
 
-    private fun copyPendingRemovals() {
-        // Cleanup input dir for removed images
-        inputDir.listFiles()?.forEach { file ->
-            if (file.name.endsWith(".img") && !imageFiles.any { it.second == file.absolutePath }) {
-                file.delete()
-            }
         }
     }
 
@@ -1049,7 +922,7 @@ class MainActivity : AppCompatActivity() {
                 // No progress for > 2 minutes — process was killed by OS
                 isRepacking = false
                 isExecuting = false
-                cancelRepackNotification()
+                RepackNotificationHelper.cancel()
                 showLog("\n[ERROR] Repack was interrupted — process killed (idle timeout).\n", LogLevel.ERROR)
                 showLog("The device may have entered Doze mode and killed the background process.\n", LogLevel.WARN)
                 showLog("Tip: go to Settings → Apps → Payload Toolkit → Battery → Unrestricted.\n", LogLevel.INFO)
@@ -1230,12 +1103,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun copyLogToClipboard() {
-        val logText = findViewById<android.widget.TextView>(R.id.textViewLog)?.text?.toString()
-        if (logText.isNullOrBlank()) {
-            Toast.makeText(this, "Nothing to copy", Toast.LENGTH_SHORT).show()
-            return
-        }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("PayloadToolkit Log", logText)
         clipboard.setPrimaryClip(clip)
@@ -1246,12 +1113,5 @@ class MainActivity : AppCompatActivity() {
     //  Utilities
     // ═══════════════════════════════════════════════════════════════
 
-    private fun formatFileSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
-            else -> String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024))
-        }
     }
 }

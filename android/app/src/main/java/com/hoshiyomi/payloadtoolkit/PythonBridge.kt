@@ -5,7 +5,6 @@ import android.util.Log
 import com.hoshiyomi.payloadtoolkit.BuildConfig
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.util.zip.ZipInputStream
 
 /**
@@ -431,14 +430,9 @@ object PythonBridge {
     //  Diagnostics helpers
     // ═══════════════════════════════════════════════════════════════
 
-    private fun resolveLibName(needed: String): String? {
-        if (SYSTEM_LIBS.contains(needed)) return null
-        return if (needed.contains(".so.")) {
-            needed.substringBefore(".so.") + ".so"
-        } else {
-            needed
-        }
-    }
+    // ═══════════════════════════════════════════════════════════════
+    //  Cross-check helpers
+    // ═══════════════════════════════════════════════════════════════
 
     private fun parseExecDeps(context: Context, deviceAbi: String? = null): List<String> {
         return try {
@@ -483,72 +477,6 @@ object PythonBridge {
         } catch (e: Exception) {
             Log.w(TAG, "ELF header check failed for ${file.name}: ${e.message}")
             false
-        }
-    }
-
-    private fun readLeLong(raf: RandomAccessFile, bytes: Int): Long {
-        val buf = ByteArray(bytes)
-        raf.readFully(buf)
-        var result = 0L
-        for (i in buf.indices) {
-            result = result or ((buf[i].toLong() and 0xFFL) shl (8 * i))
-        }
-        return result
-    }
-
-    private fun readLeUInt(raf: RandomAccessFile): Int {
-        val buf = ByteArray(4)
-        raf.readFully(buf)
-        return (buf[0].toInt() and 0xFF) or
-               ((buf[1].toInt() and 0xFF) shl 8) or
-               ((buf[2].toInt() and 0xFF) shl 16) or
-               ((buf[3].toInt() and 0xFF) shl 24)
-    }
-
-    private fun readLeUShort(raf: RandomAccessFile): Int {
-        val buf = ByteArray(2)
-        raf.readFully(buf)
-        return (buf[0].toInt() and 0xFF) or ((buf[1].toInt() and 0xFF) shl 8)
-    }
-
-    private fun validateElfProgramHeaders(file: File): String? {
-        return try {
-            val raf = RandomAccessFile(file, "r")
-            try {
-                val size = raf.length()
-                if (size < 64) return "file too small for ELF header (${size} bytes)"
-                raf.seek(32)
-                val ePhoff = readLeLong(raf, 8)
-                raf.seek(54)
-                val ePhentsize = readLeUShort(raf).toLong()
-                raf.seek(56)
-                val ePhnum = readLeUShort(raf).toLong()
-                val phTableEnd = ePhoff + ePhnum * ePhentsize
-                if (phTableEnd > size) {
-                    return "phdr table overflows: offset=$ePhoff + ${ePhnum}x${ePhentsize} = $phTableEnd > fileSize=$size"
-                }
-                for (i in 0 until ePhnum.toInt()) {
-                    val entryOff = ePhoff + i * ePhentsize
-                    raf.seek(entryOff)
-                    val pType = readLeUInt(raf)
-                    if (pType == 1 || pType == 2) {
-                        raf.seek(entryOff + 8)
-                        val pOffset = readLeLong(raf, 8)
-                        raf.seek(entryOff + 32)
-                        val pFilesz = readLeLong(raf, 8)
-                        val segEnd = pOffset + pFilesz
-                        if (segEnd > size) {
-                            val typeName = if (pType == 1) "PT_LOAD" else "PT_DYNAMIC"
-                            return "$typeName[$i] segment overflows: offset=$pOffset + filesz=$pFilesz = $segEnd > fileSize=$size"
-                        }
-                    }
-                }
-                null
-            } finally {
-                raf.close()
-            }
-        } catch (e: Exception) {
-            "read error: ${e.message}"
         }
     }
 

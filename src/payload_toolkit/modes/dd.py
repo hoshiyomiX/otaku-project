@@ -43,7 +43,7 @@ except Exception:
     _HAS_HASHLIB = False
 
 from .. import _report_progress
-from ..compression import compress, compress_streaming, DEFAULT_LEVELS
+from ..compression import DEFAULT_LEVELS, hash_and_compress_file
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -712,29 +712,24 @@ def run(*args, **kwargs):
         for i, (name, path) in enumerate(images.items()):
             _report_progress(1 + i, total_steps, f"Compressing {name}", percent=0)
 
-            # Stream-read file: hash while reading to avoid double pass
-            sha = _hashlib_mod.sha256()
-            raw_chunks = []
-            with open(path, "rb") as f:
-                while True:
-                    chunk = f.read(1 << 20)  # 1 MB chunks
-                    if not chunk:
-                        break
-                    sha.update(chunk)
-                    raw_chunks.append(chunk)
-            raw_data = b"".join(raw_chunks)
-            del raw_chunks  # free chunk list
-            unc_size = len(raw_data)
-            hash_hex = sha.hexdigest()
+            # Stream-read file: hash + compress in a single pass.
+            # Avoids loading the full partition into memory and eliminates b"".join().
+            unc_size = os.path.getsize(path)
 
             if compress_id == 0:
-                comp_data = raw_data
+                comp_data, hash_hex = hash_and_compress_file(
+                    path, "none", on_progress=lambda done, tot, _n=name, _i=i, _np=total_steps: _report_progress(
+                        1 + _i + done / max(tot, 1),
+                        _np,
+                        f"Compressing {_n}",
+                        percent=int(done / max(tot, 1) * 100)
+                    )
+                )
             else:
-                # Use streaming compression for progress reporting.
-                # Without this, xz-9 on large partitions shows no progress
-                # for 30-60+ minutes on mobile.
-                comp_data = compress_streaming(
-                    raw_data, compress_alg, level=level,
+                # Streaming hash + compress in one pass: chunk-by-chunk hash while
+                # feeding directly to the incremental compressor. No b"".join().
+                comp_data, hash_hex = hash_and_compress_file(
+                    path, compress_alg, level=level,
                     on_progress=lambda done, tot, _n=name, _i=i, _np=total_steps: _report_progress(
                         1 + _i + done / max(tot, 1),
                         _np,
@@ -742,7 +737,6 @@ def run(*args, **kwargs):
                         percent=int(done / max(tot, 1) * 100)
                     )
                 )
-            del raw_data  # free raw data after compression
 
             comp_size = len(comp_data)
             data_offset = len(data_blobs)

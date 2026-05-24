@@ -45,12 +45,11 @@ object PayloadBridge {
 
 
     // Compression level ranges per algorithm: (min, max, default)
-    // Ranges match Python compression.py LEVEL_RANGES and DEFAULT_LEVELS.
     val COMPRESS_LEVELS = mapOf(
         "none" to Triple(0, 0, 0),
         "gzip" to Triple(1, 9, 6),
         "bzip2" to Triple(1, 9, 9),
-        "xz" to Triple(0, 9, 6),
+        "xz" to Triple(0, 9, 6),     // 0-9 available; 7-9 slow on mobile (user's choice)
         "brotli" to Triple(0, 11, 6)
     )
 
@@ -129,7 +128,7 @@ object PayloadBridge {
             args.add("--compress")
             args.add(compression)
         }
-        if (level > 0) {
+        if (level >= 0) {
             args.add("--compress-level")
             args.add(level.toString())
         }

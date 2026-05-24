@@ -19,8 +19,9 @@
 # Files in nativeLibraryDir (from jniLibs) can be executed.  Pure .py files
 # only need read access, so app data is fine for them.
 #
-# Packages: python 3.13, python-brotli, libandroid-support, liblzma,
-#           libbz2, libcrypto, libsqlite3, libffi, zlib, libcrypt
+# Packages: python 3.13, python-brotli, brotli, libandroid-support, liblzma,
+#           libbz2, libcrypto, libsqlite3, ncurses, readline, libffi, zlib,
+#           libcrypt
 
 set -euo pipefail
 
@@ -33,13 +34,16 @@ DIST_DIR="$PROJECT_ROOT/dist"
 PACKAGES=(
     python
     python-brotli
+    brotli
     libandroid-posix-semaphore
     libandroid-support
     libbz2
     libcrypt
     libffi
     liblzma
+    ncurses
     openssl
+    readline
     sqlite
     zlib
 )
@@ -244,18 +248,6 @@ for arch_config in "${ARCH_CONFIGS[@]}"; do
     # IMPORTANT: Copy BEFORE patchelf so these also get their DT_NEEDED fixed.
     if [ -d "$TERMUX_PREFIX/lib/python3.13/lib-dynload" ]; then
         find "$TERMUX_PREFIX/lib/python3.13/lib-dynload" -name "*.so" \( -type f -o -type l \) | while read -r f; do
-            cp -a "$f" "$JNI_DIR/"
-        done
-    fi
-
-    # Third-party C extension modules from site-packages/.
-    # stdlib extensions live in lib-dynload/, but pip-style packages install their
-    # .so files in site-packages/ instead.  Example: python-brotli installs
-    # _brotli.cpython-313-aarch64-linux-android.so in site-packages/.
-    # IMPORTANT: Copy BEFORE patchelf so these also get their DT_NEEDED fixed.
-    SITE_PACKAGES="$TERMUX_PREFIX/lib/python3.13/site-packages"
-    if [ -d "$SITE_PACKAGES" ]; then
-        find "$SITE_PACKAGES" -maxdepth 2 -name "*.so" \( -type f -o -type l \) | while read -r f; do
             cp -a "$f" "$JNI_DIR/"
         done
     fi

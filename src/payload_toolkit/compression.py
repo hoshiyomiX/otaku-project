@@ -20,6 +20,7 @@ The compression algorithm is determined by the InstallOperation type:
 
 import gzip
 import io
+import os
 import sys
 
 # Import bz2 only if available; requires libbz2 on the system.
@@ -214,7 +215,7 @@ def compress_streaming(data, algorithm="gzip", level=None, chunk_size=1 << 20,
     level = max(rng[0], min(rng[1], int(level)))
 
     done = 0
-    result_parts = []
+    buf = io.BytesIO()
 
     def _progress():
         if on_progress:
@@ -231,16 +232,15 @@ def compress_streaming(data, algorithm="gzip", level=None, chunk_size=1 << 20,
         offset = 0
         while offset < total:
             chunk = data[offset:offset + chunk_size]
-            result_parts.append(comp.compress(chunk))
+            buf.write(comp.compress(chunk))
             offset += len(chunk)
             done = offset
             _progress()
-        result_parts.append(comp.flush())
-        return b"".join(result_parts)
+        buf.write(comp.flush())
+        return buf.getvalue()
 
     # -- Gzip: incremental via gzip.GzipFile writing chunk by chunk --
     if alg == ALG_GZIP:
-        buf = io.BytesIO()
         with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=level,
                            mtime=0) as f:
             offset = 0
@@ -269,12 +269,12 @@ def compress_streaming(data, algorithm="gzip", level=None, chunk_size=1 << 20,
         offset = 0
         while offset < total:
             chunk = data[offset:offset + xz_chunk]
-            result_parts.append(comp.compress(chunk))
+            buf.write(comp.compress(chunk))
             offset += len(chunk)
             done = offset
             _progress()
-        result_parts.append(comp.flush())
-        return b"".join(result_parts)
+        buf.write(comp.flush())
+        return buf.getvalue()
 
     # -- Brotli: incremental via brotli.Compressor --
     if alg == ALG_BROTLI:
@@ -287,12 +287,166 @@ def compress_streaming(data, algorithm="gzip", level=None, chunk_size=1 << 20,
         offset = 0
         while offset < total:
             chunk = data[offset:offset + chunk_size]
-            result_parts.append(comp.process(chunk))
+            buf.write(comp.process(chunk))
             offset += len(chunk)
             done = offset
             _progress()
-        result_parts.append(comp.finish())
-        return b"".join(result_parts)
+        buf.write(comp.finish())
+        return buf.getvalue()
+
+    raise ValueError(f"Unknown compression algorithm: {algorithm!r}")
+
+
+def hash_and_compress_file(file_path, algorithm="gzip", level=None,
+                           chunk_size=1 << 20, on_progress=None):
+    """Hash and compress a file in a single streaming pass.
+
+    Reads *file_path* chunk-by-chunk, updating SHA-256 and feeding each
+    chunk directly to an incremental compressor.  The raw file data is
+    never held fully in memory — only the compressed output buffer grows.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the input file.
+    algorithm : str
+        Compression algorithm (same as :func:`compress`).
+    level : int or None
+        Compression level (same as :func:`compress`).
+    chunk_size : int
+        Read/chunk size in bytes (default 1 MB).
+    on_progress : callable(bytes_done, total_bytes) or None
+        Progress callback invoked after each chunk.
+
+    Returns
+    -------
+    tuple[bytes, str]
+        (compressed_data, sha256_hexdigest)
+
+    Raises
+    ------
+    RuntimeError
+        If the requested algorithm module is not available.
+    ValueError
+        If *algorithm* is not recognised.
+    FileNotFoundError
+        If *file_path* does not exist.
+    """
+    import hashlib as _hashlib_ref
+
+    alg = _normalise(algorithm)
+    total = os.path.getsize(file_path)
+
+    sha = _hashlib_ref.sha256()
+
+    if alg == ALG_NONE:
+        # No compression: just hash and return raw bytes via streaming copy.
+        buf = io.BytesIO()
+        done = 0
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                sha.update(chunk)
+                buf.write(chunk)
+                done += len(chunk)
+                if on_progress:
+                    on_progress(done, total)
+        return (buf.getvalue(), sha.hexdigest())
+
+    # Resolve level
+    if level is None:
+        level = DEFAULT_LEVELS.get(alg)
+    rng = LEVEL_RANGES.get(alg, (0, 0))
+    level = max(rng[0], min(rng[1], int(level)))
+
+    done = 0
+    comp_buf = io.BytesIO()
+
+    # -- Bzip2: incremental via bz2.BZ2Compressor --
+    if alg == ALG_BZIP2:
+        if not _HAS_BZ2:
+            raise RuntimeError(
+                "bzip2 compression requires the 'bz2' module (libbz2).  "
+                "On Android: ensure libbz2.so is in nativeLibraryDir."
+            )
+        comp = _bz2_mod.BZ2Compressor(compresslevel=level)
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                sha.update(chunk)
+                comp_buf.write(comp.compress(chunk))
+                done += len(chunk)
+                if on_progress:
+                    on_progress(done, total)
+        comp_buf.write(comp.flush())
+        return (comp_buf.getvalue(), sha.hexdigest())
+
+    # -- Gzip: incremental via gzip.GzipFile writing chunk by chunk --
+    if alg == ALG_GZIP:
+        with open(file_path, "rb") as f:
+            with gzip.GzipFile(fileobj=comp_buf, mode="wb",
+                               compresslevel=level, mtime=0) as gz:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    sha.update(chunk)
+                    gz.write(chunk)
+                    done += len(chunk)
+                    if on_progress:
+                        on_progress(done, total)
+        return (comp_buf.getvalue(), sha.hexdigest())
+
+    # -- XZ: incremental via lzma.LZMACompressor --
+    if alg == ALG_XZ:
+        if not _HAS_LZMA:
+            raise RuntimeError(
+                "XZ compression requires the 'lzma' module (liblzma).  "
+                "On Termux: pkg install python  (includes liblzma).  "
+                "On Linux: apt install liblzma-dev && reinstall Python."
+            )
+        xz_chunk = max(chunk_size, 4 << 20)
+        comp = _lzma_mod.LZMACompressor(
+            format=_lzma_mod.FORMAT_XZ,
+            preset=level,
+        )
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(xz_chunk)
+                if not chunk:
+                    break
+                sha.update(chunk)
+                comp_buf.write(comp.compress(chunk))
+                done += len(chunk)
+                if on_progress:
+                    on_progress(done, total)
+        comp_buf.write(comp.flush())
+        return (comp_buf.getvalue(), sha.hexdigest())
+
+    # -- Brotli: incremental via brotli.Compressor --
+    if alg == ALG_BROTLI:
+        if not _HAS_BROTLI:
+            raise RuntimeError(
+                "brotli compression requires the 'brotli' Python package.  "
+                "Install it via pip:  pip install brotli"
+            )
+        comp = _brotli_mod.Compressor(quality=level)
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                sha.update(chunk)
+                comp_buf.write(comp.process(chunk))
+                done += len(chunk)
+                if on_progress:
+                    on_progress(done, total)
+        comp_buf.write(comp.finish())
+        return (comp_buf.getvalue(), sha.hexdigest())
 
     raise ValueError(f"Unknown compression algorithm: {algorithm!r}")
 
