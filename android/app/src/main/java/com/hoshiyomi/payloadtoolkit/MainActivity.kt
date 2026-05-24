@@ -128,7 +128,7 @@ class MainActivity : AppCompatActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (!allGranted) {
-            showLog("Some permissions were denied. File access may be limited.\n", LogLevel.WARN)
+            showLog("Some permissions were denied. File access may be limited.\n", LogHelper.LogLevel.WARN)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -174,7 +174,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializePython() {
         lifecycleScope.launch {
-            showLog("Initializing Payload Toolkit...\n", LogLevel.INFO)
+            showLog("Initializing Payload Toolkit...\n", LogHelper.LogLevel.INFO)
             withContext(Dispatchers.IO) {
                 val result = PythonBridge.ensureInitialized(this@MainActivity)
                 withContext(Dispatchers.Main) {
@@ -192,13 +192,13 @@ class MainActivity : AppCompatActivity() {
                             } catch (_: Exception) { "unknown" }
                         }
                         val source = if (result.isBundled) "bundled" else "system"
-                        showLog("Python runtime: $pyVer ($source)\n", LogLevel.INFO)
+                        showLog("Python runtime: $pyVer ($source)\n", LogHelper.LogLevel.INFO)
 
                         lifecycleScope.launch {
                             val ptVer = withContext(Dispatchers.IO) {
                                 PayloadBridge.getPyzVersion()
                             }
-                            if (ptVer != null) showLog("payload_toolkit $ptVer loaded\n", LogLevel.INFO)
+                            if (ptVer != null) showLog("payload_toolkit $ptVer loaded\n", LogHelper.LogLevel.INFO)
 
                             // Run dependency health check
                             val depReport = withContext(Dispatchers.IO) {
@@ -215,7 +215,7 @@ class MainActivity : AppCompatActivity() {
 
                         showLog("\u2550".repeat(50) + "\n\n")
                     } else {
-                        showLog("Initialization failed: ${result.error}\n", LogLevel.ERROR)
+                        showLog("Initialization failed: ${result.error}\n", LogHelper.LogLevel.ERROR)
                         // Show detailed diagnostics so the user can report them
                         if (result.diagnostics.isNotBlank()) {
                             showLog("[Diagnostics]\n")
@@ -318,7 +318,7 @@ class MainActivity : AppCompatActivity() {
             editDevice?.setText(deviceName)
             prefs.edit { putString("device", deviceName) }
             updateOutputPreview()
-            showLog("Auto-detected device: $deviceName\n", LogLevel.INFO)
+            showLog("Auto-detected device: $deviceName\n", LogHelper.LogLevel.INFO)
         }
     }
 
@@ -402,7 +402,7 @@ class MainActivity : AppCompatActivity() {
             FileHelper.cleanupOrphanedImages(inputDir, emptyList())
             updateImageListUI()
             updateOutputPreview()
-            showLog("All images removed.\n", LogLevel.INFO)
+            showLog("All images removed.\n", LogHelper.LogLevel.INFO)
         }
 
         findViewById<View>(R.id.buttonExecute).setOnClickListener {
@@ -488,7 +488,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             findViewById<android.widget.EditText>(R.id.editTextOutput)
                 .setText(resolvedPath)
-            showLog("Output directory: $resolvedPath\n", LogLevel.INFO)
+            showLog("Output directory: $resolvedPath\n", LogHelper.LogLevel.INFO)
             updateOutputPreview()
         }
     }
@@ -532,7 +532,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Skip if already added
                 if (imageFiles.any { it.first == partitionName }) {
-                    showLog("$partitionName already added, skipping.\n", LogLevel.WARN)
+                    showLog("$partitionName already added, skipping.\n", LogHelper.LogLevel.WARN)
                     continue
                 }
 
@@ -603,13 +603,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun onRepackClicked() {
         if (isRepacking) {
-            showLog("Operation already in progress. Please wait.\n", LogLevel.WARN)
+            showLog("Operation already in progress. Please wait.\n", LogHelper.LogLevel.WARN)
             return
         }
 
         if (!PythonBridge.isReady()) {
-            showLog("Python runtime not available.\n", LogLevel.ERROR)
-            showLog("Restart the app to retry initialization.\n\n", LogLevel.WARN)
+            showLog("Python runtime not available.\n", LogHelper.LogLevel.ERROR)
+            showLog("Restart the app to retry initialization.\n\n", LogHelper.LogLevel.WARN)
             return
         }
 
@@ -618,20 +618,20 @@ class MainActivity : AppCompatActivity() {
         // Uses cached result from initialization to avoid blocking the UI.
         val depCheck = cachedDepCheck
         if (depCheck == null || !depCheck.allOk) {
-            showLog("Cannot start repack: required modules missing.\n", LogLevel.ERROR)
+            showLog("Cannot start repack: required modules missing.\n", LogHelper.LogLevel.ERROR)
             if (depCheck?.missing?.contains("hashlib") == true) {
-                showLog("  hashlib is broken — SHA-256 integrity check not possible.\n", LogLevel.ERROR)
+                showLog("  hashlib is broken — SHA-256 integrity check not possible.\n", LogHelper.LogLevel.ERROR)
             }
             if (depCheck?.missing?.contains("bz2") == true) {
-                showLog("  bz2 is not available.\n", LogLevel.WARN)
+                showLog("  bz2 is not available.\n", LogHelper.LogLevel.WARN)
             }
-            showLog("  This device may not support the required native libraries.\n", LogLevel.WARN)
-            showLog("  Recommended: use a device with arm64-v8a architecture.\n\n", LogLevel.WARN)
+            showLog("  This device may not support the required native libraries.\n", LogHelper.LogLevel.WARN)
+            showLog("  Recommended: use a device with arm64-v8a architecture.\n\n", LogHelper.LogLevel.WARN)
             return
         }
         if (selectedCompression !in depCheck.availableCompression) {
-            showLog("Cannot start repack: compression '$selectedCompression' is not available.\n", LogLevel.ERROR)
-            showLog("  Available: ${depCheck.availableCompression.joinToString(", ")}\n\n", LogLevel.INFO)
+            showLog("Cannot start repack: compression '$selectedCompression' is not available.\n", LogHelper.LogLevel.ERROR)
+            showLog("  Available: ${depCheck.availableCompression.joinToString(", ")}\n\n", LogHelper.LogLevel.INFO)
             return
         }
 
@@ -655,19 +655,19 @@ class MainActivity : AppCompatActivity() {
 
         // Log header
         showLog("\n${"\u2550".repeat(50)}\n")
-        showLog("Generating flashable OTA ZIP\n", LogLevel.INFO)
+        showLog("Generating flashable OTA ZIP\n", LogHelper.LogLevel.INFO)
         showLog("${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
         showLog("\u2500".repeat(50) + "\n\n")
 
-        showLog("Partitions (${images.size}):\n", LogLevel.INFO)
+        showLog("Partitions (${images.size}):\n", LogHelper.LogLevel.INFO)
         images.entries.sortedBy { it.key }.forEach { (name, path) ->
             val file = File(path)
             showLog("  $name (${FileHelper.formatFileSize(file.length())})\n")
         }
-        showLog("Compression: $selectedCompression${CompressionConfig.formatLevelForLog(selectedCompressionLevel)}\n", LogLevel.INFO)
-        showLog("Device: $deviceValue\n", LogLevel.INFO)
-        showLog("Output file: $outputFileName\n", LogLevel.INFO)
-        showLog("Output path: $outPath\n\n", LogLevel.INFO)
+        showLog("Compression: $selectedCompression${CompressionConfig.formatLevelForLog(selectedCompressionLevel)}\n", LogHelper.LogLevel.INFO)
+        showLog("Device: $deviceValue\n", LogHelper.LogLevel.INFO)
+        showLog("Output file: $outputFileName\n", LogHelper.LogLevel.INFO)
+        showLog("Output path: $outPath\n\n", LogHelper.LogLevel.INFO)
 
         // Store state in companion object (survives Activity recreation)
         lastOutputPath = outPath
@@ -681,7 +681,7 @@ class MainActivity : AppCompatActivity() {
         val sortedNames = images.keys.sorted()
         partitionNames = sortedNames
         setupSplitProgressBar(sortedNames)
-        showLog("[INFO] Starting repack operation...\n", LogLevel.INFO)
+        showLog("[INFO] Starting repack operation...\n", LogHelper.LogLevel.INFO)
         RepackNotificationHelper.showProgress("Preparing repack...", 0)
 
         // Execute in application-scoped scope (survives Activity destruction)
@@ -781,7 +781,7 @@ class MainActivity : AppCompatActivity() {
                             // Log only when percent changes
                             if (progress.percent != lastProgressPercent) {
                                 lastProgressPercent = progress.percent
-                                current.showLog("[PROGRESS] ${progress.message} — ${progress.percent}%\n", LogLevel.PLAIN)
+                                current.showLog("[PROGRESS] ${progress.message} — ${progress.percent}%\n", LogHelper.LogLevel.PLAIN)
                             }
                         }
                     },
@@ -810,8 +810,8 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 val current = activityRef?.get()
                 if (current != null && !current.isFinishing && !current.isDestroyed) {
-                    current.showLog("[ERROR] Repack failed: ${e.message}\n", LogLevel.ERROR)
-                    current.showLog("[INFO] Check logcat for details.\n", LogLevel.WARN)
+                    current.showLog("[ERROR] Repack failed: ${e.message}\n", LogHelper.LogLevel.ERROR)
+                    current.showLog("[INFO] Check logcat for details.\n", LogHelper.LogLevel.WARN)
                 }
                 RepackNotificationHelper.showCompletion(false, "${e.message}")
             } finally {
@@ -840,16 +840,16 @@ class MainActivity : AppCompatActivity() {
         if (success) {
             val duration = if (durationMs < 60000) "${durationMs / 1000}s"
                 else "${durationMs / 60000}m ${durationMs % 60000}"
-            showLog("Completed in ${durationMs}ms\n", LogLevel.SUCCESS)
-            showLog("Output: $lastOutputPath\n", LogLevel.INFO)
+            showLog("Completed in ${durationMs}ms\n", LogHelper.LogLevel.SUCCESS)
+            showLog("Output: $lastOutputPath\n", LogHelper.LogLevel.INFO)
             RepackNotificationHelper.showCompletion(true, "Completed in $duration")
         } else {
-            showLog("Failed in ${durationMs}ms\n", LogLevel.ERROR)
-            showLog("Error: $error\n", LogLevel.ERROR)
+            showLog("Failed in ${durationMs}ms\n", LogHelper.LogLevel.ERROR)
+            showLog("Error: $error\n", LogHelper.LogLevel.ERROR)
             RepackNotificationHelper.showCompletion(false, error ?: "Unknown error")
         }
         showLog("\u2550".repeat(50) + "\n\n")
-        showLog("[INFO] Repack finished\n", LogLevel.INFO)
+        showLog("[INFO] Repack finished\n", LogHelper.LogLevel.INFO)
     }
 
     // ═══════════════════════════════════════════════════
@@ -898,9 +898,6 @@ class MainActivity : AppCompatActivity() {
         layout?.helperText = fileName
     }
 
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════
     //  Lifecycle
     // ═══════════════════════════════════════════════════════════════
@@ -923,15 +920,15 @@ class MainActivity : AppCompatActivity() {
                 isRepacking = false
                 isExecuting = false
                 RepackNotificationHelper.cancel()
-                showLog("\n[ERROR] Repack was interrupted — process killed (idle timeout).\n", LogLevel.ERROR)
-                showLog("The device may have entered Doze mode and killed the background process.\n", LogLevel.WARN)
-                showLog("Tip: go to Settings → Apps → Payload Toolkit → Battery → Unrestricted.\n", LogLevel.INFO)
+                showLog("\n[ERROR] Repack was interrupted — process killed (idle timeout).\n", LogHelper.LogLevel.ERROR)
+                showLog("The device may have entered Doze mode and killed the background process.\n", LogHelper.LogLevel.WARN)
+                showLog("Tip: go to Settings → Apps → Payload Toolkit → Battery → Unrestricted.\n", LogHelper.LogLevel.INFO)
                 setUIExecuting(false)
             } else {
                 // Process still alive — reconnect UI
                 isExecuting = true
                 setUIExecuting(true)
-                showLog("[INFO] Repack in progress (returned from background)\n", LogLevel.INFO)
+                showLog("[INFO] Repack in progress (returned from background)\n", LogHelper.LogLevel.INFO)
                 // Re-create split progress bars with current state
                 if (partitionCount > 0) {
                     val savedProgress = partitionProgress.copyOf()
@@ -1058,60 +1055,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  Log Level System
-    // ═══════════════════════════════════════════════════════════════
-
-    private enum class LogLevel(val tag: String, val colorRes: Int) {
-        INFO("INFO", R.color.log_info),
-        WARN("WARN", R.color.log_warning),
-        ERROR("ERR ", R.color.log_error),
-        SUCCESS("OK  ", R.color.log_success),
-        PLAIN("", 0),
-    }
-
-    private fun showLog(text: String, level: LogLevel = LogLevel.PLAIN) {
-        // Persist to companion object (survives Activity recreation)
+    private fun showLog(text: String, level: LogHelper.LogLevel = LogHelper.LogLevel.PLAIN) {
         savedLogText.append(text)
-
-        runOnUiThread {
-            val textView = findViewById<android.widget.TextView>(R.id.textViewLog) ?: return@runOnUiThread
-
-            if (level == LogLevel.PLAIN) {
-                textView.append(text)
-            } else {
-                val prefix = "[${level.tag}] "
-                val colored = SpannableString("$prefix$text")
-                try {
-                    colored.setSpan(
-                        ForegroundColorSpan(ContextCompat.getColor(this, level.colorRes)),
-                        0, prefix.length, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                } catch (_: Exception) { /* fallback to plain */ }
-                textView.append(colored)
-            }
-
-            // Scroll to bottom WITHOUT triggering parent NestedScrollView
-            val scrollView = findViewById<android.widget.ScrollView>(R.id.scrollViewLog)
-            scrollView?.post {
-                val child = scrollView.getChildAt(0)
-                if (child != null) {
-                    val target = child.bottom - scrollView.height
-                    scrollView.smoothScrollTo(0, if (target > 0) target else 0)
-                }
-            }
-        }
+        LogHelper.showLog(this, findViewById(R.id.textViewLog), text, level,
+            findViewById(R.id.scrollViewLog))
     }
 
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("PayloadToolkit Log", logText)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, getString(R.string.log_copied), Toast.LENGTH_SHORT).show()
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Utilities
-    // ═══════════════════════════════════════════════════════════════
-
-    }
 }
