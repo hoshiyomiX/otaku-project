@@ -508,6 +508,22 @@ print(fix_needed_all('$so_file', '$JNI_DIR'))")
             cp -a "$TERMUX_PREFIX/lib/python3.13/." "$STDLIB_STAGING/"
         fi
 
+        # Include third-party Python packages from site-packages/
+        # (their .so C extensions are already in jniLibs, but the .py
+        # wrapper modules must be on PYTHONHOME/site-packages/ for import).
+        SITE_PKGS="$TERMUX_PREFIX/lib/python3.13/site-packages"
+        STDLIB_SITE_PKGS="$STDLIB_STAGING/site-packages"
+        if [ -d "$SITE_PKGS" ]; then
+            mkdir -p "$STDLIB_SITE_PKGS"
+            # Copy only the Python packages we bundle as Termux packages
+            for pkg_dir in "$SITE_PKGS"/brotli; do
+                if [ -d "$pkg_dir" ]; then
+                    cp -a "$pkg_dir" "$STDLIB_SITE_PKGS/"
+                    echo "    site-packages: $(basename "$pkg_dir")"
+                fi
+            done
+        fi
+
         # Remove ALL .so files from stdlib (they're in jniLibs now)
         find "$STDLIB_STAGING" -name "*.so" -delete 2>/dev/null || true
 
