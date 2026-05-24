@@ -5,10 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.widget.NestedScrollView
 
 /**
  * LogHelper — Centralised log display and clipboard utilities.
@@ -33,7 +33,7 @@ object LogHelper {
         textView: TextView?,
         text: String,
         level: LogLevel = LogLevel.PLAIN,
-        scrollView: ScrollView? = null
+        scrollView: NestedScrollView? = null
     ) {
         val tv = textView ?: return
         if (level == LogLevel.PLAIN) {
@@ -51,7 +51,8 @@ object LogHelper {
             } catch (_: Exception) { /* fallback to plain */ }
             tv.append(colored)
         }
-        // Scroll to bottom WITHOUT triggering parent NestedScrollView
+        // Scroll to bottom. Programmatic smoothScrollTo does NOT dispatch
+        // nested scroll events, so it won't trigger the parent NestedScrollView.
         scrollView?.post {
             val child = scrollView.getChildAt(0)
             if (child != null) {

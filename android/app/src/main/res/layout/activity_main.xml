@@ -435,7 +435,7 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeWidth="1dp"
@@ -495,12 +495,11 @@
                         android:background="@color/log_divider" />
 
                     <!-- Scrollable log -->
-                    <ScrollView
+                    <androidx.core.widget.NestedScrollView
                         android:id="@+id/scrollViewLog"
                         android:layout_width="match_parent"
                         android:layout_height="300dp"
                         android:fillViewport="true"
-                        android:nestedScrollingEnabled="false"
                         android:scrollbars="vertical"
                         android:fadeScrollbars="true"
                         android:scrollbarThumbVertical="@android:color/darker_gray"
@@ -518,7 +517,7 @@
                             android:typeface="monospace"
                             android:textIsSelectable="true" />
 
-                    </ScrollView>
+                    </androidx.core.widget.NestedScrollView>
 
                 </LinearLayout>
 
