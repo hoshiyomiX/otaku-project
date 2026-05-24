@@ -368,7 +368,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize compression level spinner
-        setupCompressionLevelSpinner()
+        updateCompressionLevelSpinner()
     }
 
     private fun getCurrentLevelItems(): List<Int> = CompressionConfig.getLevelItems(selectedCompression)
@@ -951,7 +951,7 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             // Repack finished while app was in background — cancel notification
-            cancelRepackNotification()
+            RepackNotificationHelper.cancel()
         }
     }
 
