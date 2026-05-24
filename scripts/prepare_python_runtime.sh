@@ -252,6 +252,16 @@ for arch_config in "${ARCH_CONFIGS[@]}"; do
         done
     fi
 
+    # C extension modules from site-packages/
+    # Modern Python packages (e.g. python-brotli) place their .so extensions
+    # inside site-packages/pkg/ rather than lib-dynload/.  These must also go
+    # into jniLibs so the linker can find them at runtime via PYTHONPATH.
+    if [ -d "$TERMUX_PREFIX/lib/python3.13/site-packages" ]; then
+        find "$TERMUX_PREFIX/lib/python3.13/site-packages" -name "*.so" \( -type f -o -type l \) | while read -r f; do
+            cp -a "$f" "$JNI_DIR/"
+        done
+    fi
+
     # Strip test extension modules (saves ~1 MB, not needed for payload_toolkit)
     find "$JNI_DIR" -maxdepth 1 -name "_test*.so" -delete 2>/dev/null || true
     find "$JNI_DIR" -maxdepth 1 -name "_xxtestfuzz*.so" -delete 2>/dev/null || true
