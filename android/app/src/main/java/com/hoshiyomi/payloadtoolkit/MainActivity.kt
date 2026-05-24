@@ -758,6 +758,10 @@ class MainActivity : AppCompatActivity() {
                         // Only log when percent changes (not every chunk)
                         val current = activityRef?.get()
                         if (current != null && !current.isFinishing && !current.isDestroyed) {
+                            val shouldLog = progress.percent != lastProgressPercent
+                            if (shouldLog) {
+                                lastProgressPercent = progress.percent
+                            }
                             current.runOnUiThread {
                                 // Update split progress bars — bars live inside a tagged horizontal child
                                 val container = current.findViewById<android.widget.LinearLayout>(R.id.progressBarContainer)
@@ -777,19 +781,20 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 }
-                            }
-                            // Log only when percent changes
-                            if (progress.percent != lastProgressPercent) {
-                                lastProgressPercent = progress.percent
-                                current.showLog("[PROGRESS] ${progress.message} — ${progress.percent}%\n", LogHelper.LogLevel.PLAIN)
+                                // Log only when percent changes
+                                if (shouldLog) {
+                                    current.showLog("[PROGRESS] ${progress.message} — ${progress.percent}%\n", LogHelper.LogLevel.PLAIN)
+                                }
                             }
                         }
                     },
                     onOutputLine = { line ->
-                        // Stream Python stdout to log in real-time
+                        // Stream Python stdout to log in real-time (must be on Main thread)
                         val current = activityRef?.get()
                         if (current != null && !current.isFinishing && !current.isDestroyed) {
-                            current.showLog("$line\n")
+                            current.runOnUiThread {
+                                current.showLog("$line\n")
+                            }
                         }
                     }
                 )
