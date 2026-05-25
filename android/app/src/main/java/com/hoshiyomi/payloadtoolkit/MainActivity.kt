@@ -727,7 +727,7 @@ class MainActivity : AppCompatActivity() {
                                     val name = msg.removePrefix("Compressing ").trim()
                                     partitionNames.indexOf(name)
                                 }
-                                msg.contains("Building ddbundle") -> {
+                                msg.contains("Building nukecodes") -> {
                                     // Pre-partition step: show bar 0 as indeterminate (process started)
                                     currentPartitionIndex = 0
                                     -2  // special sentinel
@@ -772,7 +772,7 @@ class MainActivity : AppCompatActivity() {
                                         if (bar != null) {
                                             // During pre-partition step (sentinel -2), show bar 0 as indeterminate
                                             if (currentPartitionIndex == 0 && partitionProgress[0] == 0 && i == 0
-                                                && progress.message.contains("Building ddbundle")) {
+                                                && progress.message.contains("Building nukecodes")) {
                                                 bar.isIndeterminate = true
                                             } else {
                                                 bar.isIndeterminate = false
