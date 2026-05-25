@@ -676,27 +676,23 @@ def run(*args, **kwargs):
         except Exception:
             pass  # Non-critical: some Android builds restrict nice()
 
+        # ── Header ──
         lines.append("\u2550" * 50)
-        lines.append("REPACK: Generate flashable OTA ZIP")
-        lines.append(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append("\u2500" * 50)
+        lines.append("  NukeCodes Repacker")
+        lines.append(f"  {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("\u2550" * 50)
         lines.append("")
-        lines.append(f"Partitions ({num_parts}):")
-        for name, path in images.items():
-            size = os.path.getsize(path)
-            lines.append(f"  {name} ({_human_size(size)})")
-        level_display = f" (level {level})"
-        lines.append(f"Compression: {compress_name}{level_display}")
+        lines.append(f"  Partitions  : {', '.join(sorted(images.keys()))}")
+        lines.append(f"  Compression : {compress_name}{level_display}")
         if skip_verify:
-            lines.append("Verification: disabled")
-        lines.append(f"Output: {os.path.basename(output_path)}")
-        if device:
-            lines.append(f"Device: {device}")
+            lines.append(f"  Verify      : disabled")
+        lines.append(f"  Device      : {device or 'generic'}")
+        lines.append(f"  Output      : {os.path.basename(output_path)}")
         lines.append("")
 
         # ── Step 1: Build nukecodes.bin ──
         _report_progress(1, total_steps, "Building nukecodes.bin", percent=0)
-        lines.append(f"[Step 1] Building nukecodes.bin...")
+        lines.append(f"[Step 1] Building nukecodes.bin")
         lines.append(f"  Compressing {num_parts} partition(s) with {compress_name}{level_display}...")
 
         # Warn about high compression levels on mobile
@@ -761,12 +757,12 @@ def run(*args, **kwargs):
 
         bundle_data = header + data_blobs
         bundle_size = len(bundle_data)
-        lines.append(f"  Bundle size: {_human_size(bundle_size)}")
+        lines.append(f"  Bundle size : {_human_size(bundle_size)}")
         lines.append("")
 
         # ── Step 2: Build flasher scripts ──
         _report_progress(1 + num_parts, total_steps, "Building flasher scripts", percent=0)
-        lines.append("[Step 2] Building flasher scripts...")
+        lines.append("[Step 2] Building flasher scripts")
 
         update_binary = _build_update_script(
             num_parts, compress_id, compress_name, partitions_meta,
@@ -778,13 +774,13 @@ def run(*args, **kwargs):
             device=device, level=level, skip_verify=skip_verify
         )
 
-        lines.append(f"  update-binary: {len(update_binary):,} bytes")
-        lines.append(f"  flash_info.txt: {len(flash_info):,} bytes")
+        lines.append(f"  update-binary   : {len(update_binary):,} bytes")
+        lines.append(f"  flash_info.txt  : {len(flash_info):,} bytes")
         lines.append("")
 
         # ── Step 3: Write output ZIP ──
         _report_progress(2 + num_parts, total_steps, "Writing output ZIP", percent=0)
-        lines.append(f"[Step 3] Writing {os.path.basename(output_path)}...")
+        lines.append(f"[Step 3] Writing {os.path.basename(output_path)}")
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
@@ -821,15 +817,15 @@ def run(*args, **kwargs):
                 pass
 
         zip_size = os.path.getsize(output_path)
-        lines.append(f"  ZIP size: {_human_size(zip_size)}")
+        lines.append(f"  ZIP size     : {_human_size(zip_size)}")
         lines.append("")
 
         # ── Summary ──
         elapsed = time.time() - t0
         lines.append("\u2550" * 50)
-        lines.append(f"SUCCESS in {elapsed * 1000:.0f}ms")
-        lines.append(f"Output: {output_path}")
-        lines.append(f"ZIP size: {_human_size(zip_size)}")
+        lines.append(f"  Done in {elapsed:.1f}s")
+        lines.append(f"  Output  : {output_path}")
+        lines.append(f"  ZIP size: {_human_size(zip_size)}")
         lines.append("\u2550" * 50)
 
         output = "\n".join(lines)

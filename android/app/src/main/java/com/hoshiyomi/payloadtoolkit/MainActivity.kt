@@ -148,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         inputDir = File(filesDir, "input").also { it.mkdirs() }
-        outputDir = File(filesDir, "output").also { it.mkdirs() }
+        outputDir = File("/storage/emulated/0/NukeCodes").also { it.mkdirs() }
 
         initializePython()
         setupCompressionSelector()
@@ -325,13 +325,14 @@ class MainActivity : AppCompatActivity() {
     private fun setupOutputField() {
         val editOutput = findViewById<android.widget.EditText>(R.id.editTextOutput)
 
-        // Restore persisted output directory, or default to filesDir/output
+        // Restore persisted output directory, or default to /storage/emulated/0/NukeCodes
         val savedDir = prefs.getString("output_dir", null)
         if (savedDir != null) {
             outputDirPath = savedDir
             editOutput?.setText(savedDir)
         } else {
             editOutput?.setText(outputDir.absolutePath)
+            outputDirPath = outputDir.absolutePath
         }
 
         // Listen for manual edits in the output path field
@@ -653,22 +654,6 @@ class MainActivity : AppCompatActivity() {
         }
         val outPath = File(outDir, outputFileName).absolutePath
 
-        // Log header
-        showLog("\n${"\u2550".repeat(50)}\n")
-        showLog("Generating flashable OTA ZIP\n", LogHelper.LogLevel.INFO)
-        showLog("${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
-        showLog("\u2500".repeat(50) + "\n\n")
-
-        showLog("Partitions (${images.size}):\n", LogHelper.LogLevel.INFO)
-        images.entries.sortedBy { it.key }.forEach { (name, path) ->
-            val file = File(path)
-            showLog("  $name (${FileHelper.formatFileSize(file.length())})\n")
-        }
-        showLog("Compression: $selectedCompression${CompressionConfig.formatLevelForLog(selectedCompressionLevel)}\n", LogHelper.LogLevel.INFO)
-        showLog("Device: $deviceValue\n", LogHelper.LogLevel.INFO)
-        showLog("Output file: $outputFileName\n", LogHelper.LogLevel.INFO)
-        showLog("Output path: $outPath\n\n", LogHelper.LogLevel.INFO)
-
         // Store state in companion object (survives Activity recreation)
         lastOutputPath = outPath
         lastProgressMessage = ""
@@ -681,7 +666,6 @@ class MainActivity : AppCompatActivity() {
         val sortedNames = images.keys.sorted()
         partitionNames = sortedNames
         setupSplitProgressBar(sortedNames)
-        showLog("[INFO] Starting repack operation...\n", LogHelper.LogLevel.INFO)
         RepackNotificationHelper.showProgress("Preparing repack...", 0)
 
         // Execute in application-scoped scope (survives Activity destruction)
@@ -841,20 +825,14 @@ class MainActivity : AppCompatActivity() {
         isExecuting = false
         setUIExecuting(false)
 
-        showLog("\n" + "\u2550".repeat(50) + "\n")
         if (success) {
             val duration = if (durationMs < 60000) "${durationMs / 1000}s"
-                else "${durationMs / 60000}m ${durationMs % 60000}"
-            showLog("Completed in ${durationMs}ms\n", LogHelper.LogLevel.SUCCESS)
-            showLog("Output: $lastOutputPath\n", LogHelper.LogLevel.INFO)
+                else "${durationMs / 60000}m ${durationMs % 60000 / 1000}s"
             RepackNotificationHelper.showCompletion(true, "Completed in $duration")
         } else {
-            showLog("Failed in ${durationMs}ms\n", LogHelper.LogLevel.ERROR)
-            showLog("Error: $error\n", LogHelper.LogLevel.ERROR)
+            showLog("[ERROR] ${error ?: "Unknown error"}\n", LogHelper.LogLevel.ERROR)
             RepackNotificationHelper.showCompletion(false, error ?: "Unknown error")
         }
-        showLog("\u2550".repeat(50) + "\n\n")
-        showLog("[INFO] Repack finished\n", LogHelper.LogLevel.INFO)
     }
 
     // ═══════════════════════════════════════════════════
