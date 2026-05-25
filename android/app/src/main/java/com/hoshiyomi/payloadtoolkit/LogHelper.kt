@@ -71,7 +71,7 @@ object LogHelper {
             return
         }
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("PayloadToolkit Log", text)
+        val clip = ClipData.newPlainText("NukeCodes OTA Generator Log", text)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(context, context.getString(R.string.log_copied), Toast.LENGTH_SHORT).show()
     }

@@ -30,7 +30,7 @@ import java.io.FileOutputStream
 import androidx.core.content.edit
 
 /**
- * MainActivity — Payload Toolkit Android.
+ * MainActivity — NukeCodes OTA Generator.
  *
  * Single-purpose: Repack partition images (.img) into a flashable OTA ZIP.
  *
@@ -174,7 +174,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializePython() {
         lifecycleScope.launch {
-            showLog("Initializing Payload Toolkit...\n", LogHelper.LogLevel.INFO)
+            showLog("Initializing NukeCodes OTA Generator...\n", LogHelper.LogLevel.INFO)
             withContext(Dispatchers.IO) {
                 val result = PythonBridge.ensureInitialized(this@MainActivity)
                 withContext(Dispatchers.Main) {
@@ -454,7 +454,7 @@ class MainActivity : AppCompatActivity() {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Storage Permission Required")
                     .setMessage(
-                        "Payload Toolkit needs access to all files to read/write " +
+                        "NukeCodes OTA Generator needs access to all files to read/write " +
                         "partition images and generate OTA ZIPs.\n\n" +
                         "Please grant 'All files access' in the next screen."
                     )
@@ -905,7 +905,7 @@ class MainActivity : AppCompatActivity() {
                 RepackNotificationHelper.cancel()
                 showLog("\n[ERROR] Repack was interrupted — process killed (idle timeout).\n", LogHelper.LogLevel.ERROR)
                 showLog("The device may have entered Doze mode and killed the background process.\n", LogHelper.LogLevel.WARN)
-                showLog("Tip: go to Settings → Apps → Payload Toolkit → Battery → Unrestricted.\n", LogHelper.LogLevel.INFO)
+                showLog("Tip: go to Settings → Apps → NukeCodes OTA Generator → Battery → Unrestricted.\n", LogHelper.LogLevel.INFO)
                 setUIExecuting(false)
             } else {
                 // Process still alive — reconnect UI

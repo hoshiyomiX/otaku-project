@@ -1,4 +1,4 @@
-# ProGuard rules for Payload Toolkit v3.19
+# ProGuard rules for NukeCodes OTA Generator v3.19
 # ================================
 # R8/ProGuard is now ENABLED for release builds.
 

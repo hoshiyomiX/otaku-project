@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    activity_main.xml — Payload Toolkit
+    activity_main.xml — NukeCodes OTA Generator
 
     Single-purpose: Repack partition images (.img) into flashable OTA ZIP.
 

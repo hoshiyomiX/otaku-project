@@ -33,7 +33,7 @@ object RepackNotificationHelper {
             )
             val notification = NotificationCompat.Builder(ctx, PayloadToolkitApp.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("Payload Toolkit")
+                .setContentTitle("NukeCodes OTA Generator")
                 .setContentText(message)
                 .setProgress(100, percent.coerceIn(0, 100), percent == 0)
                 .setOngoing(true)

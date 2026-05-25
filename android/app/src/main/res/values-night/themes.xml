@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-        Night-mode override for Theme.PayloadToolkit.
+        Night-mode override for NukeCodes OTA Generator.
         Same theme name, different parent and color palette.
         Android automatically picks values-night/ when night mode is active.
     -->
