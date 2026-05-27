@@ -1,16 +1,10 @@
 # OTAku Project — Parent Container
-# This repo contains the Stellar Frameworks skill system,
-# project management files, and references payload-toolkit-android as a submodule.
+# Standalone Android project lives in hoshiyomiX/payload-toolkit-android
 
 # ═══════════════════════════════════════════════════════════════
-#  Submodule content (tracked in payload-toolkit-android repo)
+#  Cloned Android repo (tracked in hoshiyomiX/payload-toolkit-android)
 # ═══════════════════════════════════════════════════════════════
-android/
-src/
-scripts/
-docs/
-.github/
-payload-toolkit/
+payload-toolkit-android/
 
 # ═══════════════════════════════════════════════════════════════
 #  z.ai platform (local development only)
