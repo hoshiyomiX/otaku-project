@@ -1,0 +1,3 @@
+[submodule "payload-toolkit-android"]
+	path = payload-toolkit-android
+	url = https://github.com/hoshiyomiX/payload-toolkit-android.git
